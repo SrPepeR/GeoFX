@@ -3,10 +3,14 @@ package dad.javafx.geofx.root;
 import java.io.IOException;
 
 import dad.javafx.geofx.client.GeoFXservice;
-import dad.javafx.geofx.client.GeoFXserviceException;
 import dad.javafx.geofx.client.LocationMessage;
 import dad.javafx.geofx.location.LocationController;
 import dad.javafx.geofx.location.LocationModel;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.Button;
@@ -41,8 +45,12 @@ public class RootController {
 	LocationMessage devuelto;
 	
 	GeoFXservice service = new GeoFXservice();
+	Task<String> tarea;
+	Task<LocationMessage> tarea2;
 	
-	String ip = "";
+	StringProperty ip = new SimpleStringProperty();
+	
+	BooleanProperty devueltoProperty = new SimpleBooleanProperty();
 
 	public RootController() throws IOException {
 		
@@ -50,13 +58,9 @@ public class RootController {
 		loader.setController(this);
 		loader.load();
 		
-		try {
-			this.ip = service.ip();
-		} catch (GeoFXserviceException e1) {
-			e1.printStackTrace();
-		}
+		ipText.textProperty().bindBidirectional(ip);
 		
-		ipText.setText(ip);
+		iniciaTaskTarea();
 		
 		location = new LocationController(ipText.getText());
 		model = location.getModel();
@@ -64,18 +68,59 @@ public class RootController {
 		setTabs();
 		
 		wifiImage.setImage(new Image(getClass().getResource("/imagenes/Wifi-icon.png").toString()));
-		onCheckAction();
+		
+		
 		
 		//ACTIONS
 		checkButton.setOnAction(e -> onCheckAction());
 		
 	}
 	
+	private void iniciaTaskTarea() {
+		tarea = new Task<String>() {
+			
+			@Override
+			protected String call() throws Exception {
+				String ip = service.ip();
+				return ip;
+			}
+		};
+		
+		tarea.setOnSucceeded(e -> {
+			ip.set((String)tarea.getValue());
+			System.out.println("IP: " + ip.get());
+			iniciaTaskTarea2();
+		});
+		
+		new Thread(tarea).start();
+	}
+	
+	private void iniciaTaskTarea2() {
+		tarea2 = new Task<LocationMessage>() {
+			
+			@Override
+			protected LocationMessage call() throws Exception {
+				location.newDevuelto();
+				LocationMessage message = location.getMessage();
+				return message;
+			}
+		};
+		
+		tarea2.setOnSucceeded(e -> {
+			devuelto = tarea2.getValue();
+			onCheckAction();
+		});
+		
+		new Thread(tarea2).start();
+	}
+	
 	private void onCheckAction() {
 		
-		//TODO
-		//POR ALGUNA EXTRAÑA RAZÓN NO VA
-		model.setIp(ipText.getText());
+		model.setIp(ip.get());
+		
+		if (devuelto == null) {
+			return;
+		}
 		
 		location.newDevuelto();
 		devuelto = location.getMessage();
@@ -91,7 +136,7 @@ public class RootController {
 		
 		location.setImage(devuelto.getCountry_code());
 	}
-
+	
 	public VBox getRoot() {
 		return this.contenedorBox;
 	}
